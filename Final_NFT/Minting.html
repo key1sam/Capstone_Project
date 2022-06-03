@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<link rel="stylesheet" href="./static/basic.css">
+
+
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous" />
+
+    <!-- jquery  -->
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js" crossorigin="anonymous"></script>
+    <script src="./js/jscript.js"></script>
+	<script src="./js/content.js"></script>
+
+
+	<!-- ipfs -->
+    <script src="./js/buffer.js"></script>
+    <script src="https://unpkg.com/ipfs-api/dist/index.js" crossorigin="anonymous"></script>
+
+    <!-- blockchain-->
+    <script type="text/javascript" src='./js/abi.js'></script>
+    <script type="text/javascript" src='./js/web3.min.js'></script>
+
+    <script>
+
+$(window).load(async function () {
+
+var contractAddress;
+//블록체인 네트워크 선택하기
+var blockChainNetwork = localStorage.getItem("blockChainNetwork")
+$("#selectNetwork").val(blockChainNetwork).prop("selected", true);
+
+
+if (blockChainNetwork == "MATIC_MUMBAI") {
+	contractAddress = contractAddress_MATIC_MUMBAI;
+}
+
+else if (blockChainNetwork == "ETH_RINKEBY") {
+	contractAddress = contractAddress_ETH_RINKEBY;
+}
+
+if (typeof web3 !== "undefined") {
+	console.log("web3가 활성화되었습니다");
+
+	$("#resultbrowsers").text("메타마스크를 로그인 해주세요!");
+
+	if (web3.currentProvider.isMetaMask == true) {
+		$("#resultbrowsers").text("메타마스크가 활성화되었습니다");
+		try {
+
+			accounts = await ethereum.request({
+				method: "eth_requestAccounts"
+			});
+
+			$("#showAccount").text(accounts + '님, 안녕하세요!	~');
+			//web3
+			window.web3 = new Web3(window.ethereum);
+
+			var mintingEvent = await new window.web3.eth.Contract(
+				abiobj,
+				contractAddress
+			);
+
+
+		} catch (error) {
+			console.log(`error msg: ${error}`);
+			$("#resultbrowsers").text("메타마스크를 로그인 해주세요!");
+			return false;
+		}
+	} else {
+		$("#resultbrowsers").text("메타마스크를 사용할 수  없니댜.");
+	}
+} else {
+	$("#resultbrowsers").text("web3를 찾을 수 없습니다.");
+}
+
+
+
+//승인 상태조회
+const ApprovalState = await mintingEvent.methods.isApprovedForAll(accounts[0], contractAddress).call();
+if (ApprovalState) {
+	$("#btn_setApprovalForAll").text("거래가능");
+} else {
+	$("#btn_setApprovalForAll").text("거래불가");
+}
+//console.log(ApprovalState);		
+
+//ipfs
+const IPFS_URL = "https://capstone-design.infura-ipfs.io/ipfs/";
+const IPFS_API_URL = "ipfs.infura.io";
+const ipfs = window.IpfsApi(IPFS_API_URL, "5001", { protocol: "https" }); // Connect to IPFS
+
+$("#btn_uploadfile").on("click", function () {
+	if ($("#uploadfile").val() == "") {
+		alert("대표이미지를 입력해주세요");
+		$("#uploadfile").focus();
+		return;
+	}
+
+	var reader = new FileReader();
+	reader.onloadend = function () {
+		//console.log("reader.result" + reader.result);
+		var buf = buffer.Buffer(reader.result); // Convert data into buffer
+		ipfs.files.add(buf, (err, result) => {
+			// Upload buffer to IPFS
+			if (err) {
+				console.error(err);
+				return;
+			}
+
+			var hash_img_url = IPFS_URL + result[0].hash;
+
+			//console.log(`Url --> ${hash_img_url}`);
+			$("#ipfs_file_url").text(hash_img_url);
+			$("#ipfs_file_url").attr("href", hash_img_url);
+			$("#hash_img_url").val(hash_img_url);
+		});
+	};
+
+	//console.log($('input#uploadfile')[0].files[0]);
+	reader.readAsArrayBuffer($("input#uploadfile")[0].files[0]); // Read Provided File
+});
+
+$("#bnt_mint").on("click", function () {
+	//https://docs.opensea.io/docs/metadata-standards
+	/*
+		  {
+		  "description": "Friendly OpenSea Creature that enjoys long swims in the ocean.", 
+		  "external_url": "https://openseacreatures.io/3", 
+		  "image": "https://storage.googleapis.com/opensea-prod.appspot.com/puffs/3.png", 
+		  "name": "Dave Starbelly",
+		  "attributes": [ ... ], 
+		  }                
+	  */
+
+	if (!localStorage.getItem("blockChainNetwork")) {
+		alert("네트워크를 선택해주세요!");
+		return false;
+	}
+	
+	var name = $("#name").val();
+	var hash_img_url = $("#hash_img_url").val();
+	var description = $("#description").val();
+	var category_val = $("select[name=category] option:selected").text();
+	var metaData = {};
+	var attributes = [];
+
+	if (name == "") {
+		alert("발행자를 입력해주세요");
+		$("#name").focus();
+		return false;
+	}
+
+	if (hash_img_url == "") {
+		alert("대표이미지를 업로드해주세요");
+		$("#uploadfile").focus();
+		return false;
+	}
+
+	if (category == "선택하세요") {
+		alert("카테고리를 선택하세요!");
+		$("#category").focus();
+		return false;
+	}
+
+	if (description == "") {
+		alert("description을 입력해주세요");
+		$("#description").focus();
+		return false;
+	}
+
+	attributes.push({ trait_type: "category", value: category_val });
+
+	metaData["name"] = name;
+	metaData["attributes"] = attributes;
+	metaData["description"] = description;
+	metaData["image"] = hash_img_url;
+
+	console.log(JSON.stringify(metaData));
+
+	var buf = buffer.Buffer.from(JSON.stringify(metaData));
+	ipfs.files.add(buf, (err, result) => {
+		// Upload buffer to IPFS
+		if (err) {
+			console.error(err);
+			return;
+		}
+		var hash_meta_url = IPFS_URL + result[0].hash;
+		console.log(`hash_meta_url --> ${hash_meta_url}`);
+
+		// mint function 
+		setMint(hash_meta_url);
+	});
+});
+
+
+
+async function setMint(hash_meta_url) {
+	if (mintingEvent != null) {
+		try {
+			var accounts = await web3.eth.getAccounts();
+			var receiptObj = await mintingEvent.methods.mintNFT(hash_meta_url).send({ from: accounts[0] });
+
+			console.log(receiptObj);
+			$("#resultbox").text("처리결과 \n" + JSON.stringify(receiptObj));
+
+		} catch (error) {
+			console.log(error);
+			$("#resultbox").text("처리결과 \n" + error);
+		}
+
+	}
+}
+
+
+
+//상태변경하기
+$('#btn_setApprovalForAll').click(async function () {
+	var receiptObj = await mintingEvent.methods.setApprovalForAll(contractAddress, true).send({ from: accounts[0] });
+	console.log(receiptObj);
+	location.reload();
+});
+});
+
+    </script>
+
+
+<title>NFT</title>
+</head>
+
+
+<body>
+	<input type="hidden" id="hash_img_url" name="hash_img_url" />
+	<header class="header">
+		<div class="header_wrap">
+			<div class="logo">
+				<a href="index.html">
+					<img src="./image/logo.png" alt="로고 이미지" />
+				</a>
+			</div>
+			<div class="menu">
+				<ul>
+					<li><a href="./Minting.html">Minting</a></li>
+					<li><a href="./mynft.html">MY-NFT</a></li>
+					<li><a href="./sale.html">Market</a></li>
+					<li><a href="./team.html">MEET OUR TEAM</a></li>
+				</ul>
+			</div>			
+		</div>
+		<div class="d-flex">
+			<button type="button" class="btn btn-dark" id="btn_setApprovalForAll" style="width: 350px; font-weight: bold; font-family : LeeSeoyun;">거래상태</button>
+			&nbsp;&nbsp;
+			<span class="col-md-7">
+				<select class="form-select" aria-label="블록체인 네트워크" id="selectNetwork" style="font-weight : bold; font-family : LeeSeoyun;">
+					<option value="">네트워크를 선택하세요</option>
+					<option value="MATIC_MUMBAI">폴리곤-뭄바이</option>
+					<option value="ETH_RINKEBY">이더리움-Kovan</option>
+				</select>
+			</span>
+		</div>
+	</header>
+	
+    <div class="container" style="margin-top: 100px;">
+        <h1 class="bd-title text-center" style="font-weight: bold; font-family : LeeSeoyun; margin-top: 50px; margin-bottom: 30px;">NFT Minting</h1>
+        <div class="box-body">
+            <div class="input-group mb-3">
+				<div class="input-group-prepend">
+					<span class="input-group-text" style="font-weight: bold; font-family : LeeSeoyun;">계정</span>
+				</div>
+				<span class="form-control" id="showAccount" style="font-weight: bold; font-family : LeeSeoyun;"></span>
+			</div>
+
+            <div class="col-12">
+                <label for="name" class="form-label" style = "font-weight : bold; font-family : LeeSeoyun;">발행자</label>
+                <input type="text" class="form-control" id="name" placeholder="발행자를 입력하세요" value="" style = "font-weight : bold; font-family : LeeSeoyun;"/>
+            </div>
+            <div class="col-12 py-3">
+                <label for="uploadfile" class="form-label" style = "font-weight : bold; font-family : LeeSeoyun; ">대표이미지</label>
+                <div class="input-group input-group-sm">
+                    <input type="file" class="form-control" name="uploadfile" id="uploadfile" />
+                    <span class="input-group-btn">
+                        <button type="button" class="btn btn-secondary btn-flat" id="btn_uploadfile" style = "font-weight : bold; font-family : LeeSeoyun;">
+                            Upload
+                        </button>
+                    </span>
+                </div>
+            </div>
+            <small class="text-muted"><a id="ipfs_file_url" target="_blank"></a></small>
+
+
+            <div class="col-12 py-3">
+                <div class="form-group">
+                    <label for="category" style = "font-weight : bold; font-family : LeeSeoyun;">카테고리</label>
+                    <select class="selectpicker form-control" name="category" id="category" style = "font-weight : bold; font-family : LeeSeoyun;">
+                        <option value="" style = "font-weight : bold; font-family : LeeSeoyun;">선택하세요</option>
+                        <option value="기본">기본</option>
+                        <option value="중요">중요</option>
+                        <option value="기타">기타</option>
+                    </select>
+                </div>
+            </div>
+
+
+
+            <div class="col-12">
+                <label for="description" class="form-label" style = "font-weight : bold; font-family : LeeSeoyun;">Description</label>
+                <textarea class="form-control" rows="3" id="description" placeholder="description을 입력하세요" style = "font-weight : bold; font-family : LeeSeoyun;"></textarea>
+            </div>
+
+
+            <div class="col-12 divResponse">
+                <pre class="response"><span id="resultbox" style = "font-weight : bold; font-family : LeeSeoyun;">Response API:</span></pre>
+            </div>
+
+            <div>
+                <button type="button" class="btn btn-primary" id="bnt_mint" style = "font-weight : bold; font-family : LeeSeoyun;">Minting</button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">            
+		<div class="footer_content">
+			Copyrightⓒ2022 by Capston Design Team1
+		</div>            
+	</footer>
+
+    <script src="./js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

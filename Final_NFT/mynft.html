@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <link rel="stylesheet" href="static/basic.css">
+    <link rel="stylesheet" href="./css/content.css">
+    
+    <!-- Required meta tags -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous" />
+
+    <!-- jquery  -->
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js" crossorigin="anonymous"></script>
+    <script src="./js/jscript.js"></script>
+    <script src="./js/content.js"></script>
+
+    <!-- ipfs -->
+    <script src="./js/buffer.js"></script>
+    <script src="https://unpkg.com/ipfs-api/dist/index.js" crossorigin="anonymous"></script>
+
+    <!-- blockchain -->
+    <script type="text/javascript" src="./js/abi.js"></script>
+    <script type="text/javascript" src="./js/web3.min.js"></script>
+
+    <script>
+
+        $(window).load(async function () {
+
+            var contractAddress;
+			//블록체인 네트워크 선택하기
+			var blockChainNetwork = localStorage.getItem("blockChainNetwork")
+			$("#selectNetwork").val(blockChainNetwork).prop("selected", true);
+
+			if (blockChainNetwork == "MATIC_MUMBAI") {
+				contractAddress = contractAddress_MATIC_MUMBAI;
+			}
+
+			else if (blockChainNetwork == "ETH_RINKEBY") {
+				contractAddress = contractAddress_ETH_RINKEBY;
+			}
+
+            if (typeof web3 !== "undefined") {
+                console.log("web3가 활성화되었습니다");
+
+                $("#resultbrowsers").text("메타마스크를 로그인 해주세요!");
+
+                if (web3.currentProvider.isMetaMask == true) {
+                    $("#resultbrowsers").text("메타마스크가 활성화되었습니다");
+                    try {
+                        accounts = await ethereum.request({
+                            method: "eth_requestAccounts"
+                        });
+
+                        $("#showAccount").text(accounts + '님, 안녕하세요!');
+                        //web3
+                        window.web3 = new Web3(window.ethereum);
+
+                        var mintingEvent = await new window.web3.eth.Contract(
+                            abiobj,
+                            contractAddress
+                        );
+                    } catch (error) {
+                        console.log(`error msg: ${error}`);
+                        $("#resultbrowsers").text("메타마스크를 로그인 해주세요!");
+                        return false;
+                    }
+                } else {
+                    $("#resultbrowsers").text("메타마스크를 사용할 수 없습니다.");
+                }
+
+            } else {
+                $("#resultbrowsers").text("web3를 찾을 수 없습니다.");
+            }
+
+            // 승인 상태조회
+            const ApprovalState = await mintingEvent.methods.isApprovedForAll(accounts[0], contractAddress).call();
+            if (ApprovalState) {
+                $("#btn_setApprovalForAll").text("거래가능");
+                ApprovalStateYN = false;
+            } else {
+                $("#btn_setApprovalForAll").text("거래불가");
+                ApprovalStateYN = true;
+            }
+
+            const tempnftListArray = await mintingEvent.methods.getNftTokens(accounts[0]).call(); // Smart Contract
+            console.log(tempnftListArray)
+
+            for(i=0; i<tempnftListArray.length; i++) {
+                _nftTokenId = tempnftListArray[i].nftTokenId;
+                _nftTokenURI = tempnftListArray[i].nftTokenURI;
+                _price = tempnftListArray[i].price;
+                _ipfsinfo = ipfsInfo(_nftTokenURI);
+                name = _ipfsinfo.name;
+                image = _ipfsinfo.image;
+
+                var html = '';
+
+                html += '<tr id="tr_' + _nftTokenId + '">';
+                html += '<td>' + (i + 1) + '</td>';
+                html += '<td>' + _nftTokenId + '</td>';
+
+                //console.log(html);
+
+                html += '<td>' + name + '</td>';
+                html += '<td><img src=' + image + ' width=100px/></td>';
+
+                html += '<td>' + _price + '</td>';
+                html += '<td>';
+                html += '<a href="./mynft_detail.html?tokenId=' + _nftTokenId + '" class="btn btn-secondary btn-flat" style = "font-weight : bold; font-family : LeeSeoyun;">상세보기</a> ';
+
+                if (_price == 0) {
+                    html += '<button type="button" class="btn btn-primary btn_onSale" data-bs-toggle="modal" data-bs-target="#saleModal" style = "font-weight : bold; font-family : LeeSeoyun;"data-val="' + _nftTokenId + '">판매하기</button> ';
+                }
+
+
+                html += '<button type="button" class="btn btn-danger btn_burn"" style = "font-weight : bold; font-family : LeeSeoyun;" data-val="' + _nftTokenId + '">삭제하기</button> ';
+
+                html += '</td> ';
+                html += '</tr>';
+
+                console.log(html);
+
+                $("#dynamicTbody").append(html);
+            }
+
+            if (i == 0) {
+
+                var html = '';
+            
+                html += '<tr>';
+                html += '<td colspan="6" style="text-align:center;">자료없음</td> ';
+                html += '</tr>';
+            
+                $("#dynamicTbody").append(html);
+            
+            }
+
+            function ipfsInfo(_nftTokenURI) {
+                $.ajax({
+                    url: _nftTokenURI,
+                    type: 'get',
+                    data: '',
+                    async: false,
+                    success: function (data) {
+                        //console.log(data);
+                        //console.log(data.name);
+                        //console.log(data.image);
+            
+                        name = data.name;
+                        image = data.image;
+                    },
+                    error: function (e) {
+                        console.log("값을 가져오지 못했습니다.");
+                    }
+                });
+            
+                return {
+                    name: name,
+                    image: image
+                };
+            }
+
+            //상태변경하기
+            $('#btn_setApprovalForAll').click(async function () {
+                var receiptObj = await mintingEvent.methods.setApprovalForAll(contractAddress, true).send({ from: accounts[0] });
+                console.log(receiptObj);
+                location.reload();
+            });
+
+            $('.btn_onSale').click(function () {
+                var tokenId = $(this).attr("data-val");
+                $('.modal-title').html("판매등록하기");
+                $('#saleModal').modal('show');
+            
+                //판매하기
+                $('.btn_onSaleSubmit').click(async function () {
+                    var price = $("#price").val();
+                    //console.log(tokenId, price, ApprovalState);
+            
+            
+                    var ownerAddress = await mintingEvent.methods.ownerOf(tokenId).call();
+                    console.log(ownerAddress.toLowerCase(), accounts[0]);
+            
+                    if (ownerAddress.toLowerCase() != accounts[0]) {
+                        alert("제품 소유자만 판매등록할 수 있습니다.");
+                        return false;
+                    }
+            
+                    if (!ApprovalState) {
+                        alert("판매승인 상태를 변경하세요");
+                        return false;
+                    }
+
+                    if (price == 0) {
+                        alert("0 이상의 금액을 입력해주세요(숫자만)");
+                        return false;
+                    }
+            
+                    var receiptObj = await mintingEvent.methods.setSaleNftToken(tokenId, price).send({ from: accounts[0], gas: 3000000 });
+                    console.log(receiptObj);
+            
+                    location.reload();
+                });
+            });
+
+            $('.btn_burn').click(async function () {
+                if (confirm('삭제하시면 복구할수 없습니다. \n 정말로 삭제하시겠습니까??')) {
+                    var tokenId = $(this).attr("data-val");
+                    var receiptObj = await mintingEvent.methods.burn(tokenId).send({ from: accounts[0] });
+                    console.log(receiptObj);
+            
+                    $('#tr_' + tokenId + '').remove();
+                    
+                    return false;
+                }
+            });
+        });
+
+    </script>
+
+    <title>NFT</title>
+</head>
+<body>
+    <header class="header">
+		<div class="header_wrap">
+			<div class="logo">
+				<a href="index.html">
+					<img src="./image/logo.png" alt="로고 이미지" />
+				</a>
+			</div>
+			<div class="menu">
+				<ul>
+					<li><a href="./Minting.html">Minting</a></li>
+					<li><a href="./mynft.html">MY-NFT</a></li>
+					<li><a href="./sale.html">Market</a></li>
+					<li><a href="./team.html">MEET OUR TEAM</a></li>
+				</ul>
+			</div>			
+		</div>
+		<div class="d-flex">
+			<button type="button" class="btn btn-dark" id="btn_setApprovalForAll" style="width: 250px; font-weight: bold; font-family : LeeSeoyun;">거래상태</button>
+			&nbsp;&nbsp;
+			<span class="col-md-7">
+				<select class="form-select" aria-label="블록체인 네트워크" id="selectNetwork" style="font-weight : bold; font-family : LeeSeoyun;">
+					<option value="">네트워크를 선택하세요</option>
+					<option value="MATIC_MUMBAI">폴리곤-뭄바이</option>
+					<option value="ETH_RINKEBY">이더리움-Kovan</option>
+				</select>
+			</span>
+		</div>
+	</header>
+
+    <div class="container" style="margin-top: 100px;">
+
+        <h1 class="bd-title text-center" style="font-weight : bold; font-family : LeeSeoyun; margin-top: 20px;">My NFT</h1>
+
+        <div class="input-group mb-3">
+          
+            <div class="input-group-prepend">
+                <span class="input-group-text"style="font-weight : bold; font-family : LeeSeoyun;">계정</span>
+            </div>
+
+            <span class="form-control" id="showAccount"style="font-weight : bold; font-family : LeeSeoyun;"></span>
+        </div>
+
+        <div class="box-body" style="min-height:500px">
+            <table class="table table-hover">
+                <thead style="font-weight: bold; font-family : LeeSeoyun;">
+                    <tr>
+                        <th>순서</th>
+                        <th>TokenId</th>
+                        <th>창작자</th>
+                        <th>이미지</th>
+                        <th>금액</th>
+                        <th>비고</th>
+                    </tr>
+                </thead>
+                <tbody id="dynamicTbody" style="font-weight: bold; font-family : LeeSeoyun;"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal fade" id="saleModal" tabindex="-1" aria-labelledby="saleModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="saleModalLabel">Modal title</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="number" class="form-control" id="price" placeholder="판매금액을 입력하세요(숫자만)"/>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary btn_onSaleSubmit">판매등록하기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <footer class="footer">            
+        <div class="footer_content">
+            Copyrightⓒ2022 by Capston Design Team1
+        </div>            
+    </footer>
+
+    <script src="./js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
